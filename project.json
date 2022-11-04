@@ -1,0 +1,16 @@
+{
+	"langrev": "1",
+	"warnings": ["no-unused"],
+	"dependencies": [],
+	"linked-libraries": [],
+	"authors": ["tonis"],
+	"version": "0.1.0",
+	"sources": ["./png.c3"],
+	"targets": {
+		"test": {
+			"type": "executable",
+			"sources-add": ["./test.c3"]
+		}
+	},
+	"output": "./build"
+}
