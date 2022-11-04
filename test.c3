@@ -8,6 +8,7 @@ import libc;
 
 const char[8] PNG_MAGIC_BYTES = x"89 50 4e 47 0d 0a 1a 0a";
 char[] image = "./assets/red_blue/test.png";
+char[] image2 = "./assets/test.png";
 char[] text = "./file.txt";
 
 
@@ -15,37 +16,71 @@ enum ChunkType {
     IHDR,
     GAMA,
     IDAT,
-    IEND
+    IEND,
+    ERROR
 }
 
 struct Chunk {
-    ChunkType chunk;
+    ChunkType type;
     char[] data;
-    uint size;
+    int crc;
+    int size;
 }
 
-fn void read_chunk(char* data, uint offset) {
-    
+fn Chunk read_chunk(char* data, uint offset) {
+    libc::printf("OFFSET %d \n", offset);
 
-    // Parse big endian size bytes
-    int size = (data[offset] | ( (int)data[offset + 1] << 8 ) | ( (int)data[offset + 2] << 16 ) | ( (int)data[offset + 3] << 24 ));
-    char[] chunkType = data[(offset + 4).. (offset + 8)];
-    // char[] content = bytes[(offset + 7)..size];
-    // libc::printf("%d \n", size);
-    libc::printf("%s \n", chunkType);
+    // Parse size bytes
+    char[4] temp;
+    libc::memcpy(data + offset, &temp, 4);
+    int size = bitcast(temp, int);
+    libc::printf("size %d \n", size);
+    ChunkType chunkType = {|
+        char[] name = data[(offset + 4).. (offset + 8)]; 
+        libc::printf("TYPE %s \n", name);
+        if (libc::strcmp(name, "IHDR") == 0) {
+            return ChunkType.IHDR;
+        }
+
+        if (libc::strcmp(name, "GAMA") == 0) {
+            return ChunkType.GAMA;
+        }
+
+        if (libc::strcmp(name, "IDAT") == 0) {
+            return ChunkType.IDAT;
+        }
+
+        if (libc::strcmp(name, "IEND") == 0) {
+            return ChunkType.IEND;
+        }
+
+        libc::printf("CHUNK ERROR TYPE %s \n", name);
+        return ChunkType.ERROR;
+    |};
+
+    char[] content = data[(offset + 8) .. (offset + 8 + size)];
+    
+    libc::memcpy(data + offset + content.len, &temp, 4);
+    int crc = bitcast(temp, int);
+
+    libc::printf("CRC %d \n", crc);
+    return Chunk {
+        chunkType,
+        content,
+        crc,
+        4 + 4 + size + 4 // Size + name + content + CRC
+    };
 }
 
 fn int main() {
     File file;
 
-    try (File.open(&file, image, "rb"));
+    try (File.open(&file, image2, "rb"));
     try (File.seek(&file, 0, Seek.END));
 
     defer try (file.close());
 
     long size = libc::ftell(file.file);
-    std::io::printf("file size %d \n", size);
-
     try (File.seek(&file, 0, Seek.SET));
 
     char* data = malloc(size * char.sizeof);
@@ -56,8 +91,15 @@ fn int main() {
         std::io::printf("File is not correct PNG");
         return 1;
     }
+    // Chunk chunk = read_chunk(data, 8);
+    int offset = 8;
+    while(true) {
+        Chunk chunk = read_chunk(data, offset);
+        offset += chunk.size;
 
-    read_chunk(data, PNG_MAGIC_BYTES.len);
+        if (chunk.type == ChunkType.IEND) break;
+        if (offset > 40) break;
+    }
     // int j;
     // for(j = 0; j < size; j++) {
     //         libc::printf("%02x ", data[j]);
