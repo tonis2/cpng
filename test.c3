@@ -20,29 +20,31 @@ enum ChunkType {
     ERROR
 }
 
+enum ImageType {
+    GRAYSCALE,
+    TRUECOLOR,
+    INDEXEDCOLOR,
+    GREYSCALE_A,
+    TRUECOLOR_A
+}
+
 struct Chunk {
     ChunkType type;
     char[] data;
-    int crc;
     int size;
 }
 
 fn Chunk read_chunk(char* data, uint offset) {
     libc::printf("OFFSET %d \n", offset);
-
-    // Parse size bytes
-    char[4] temp;
-    libc::memcpy(data + offset, &temp, 4);
-    int size = bitcast(temp, int);
-    libc::printf("size %d \n", size);
+    
     ChunkType chunkType = {|
-        char[] name = data[(offset + 4).. (offset + 8)]; 
+        char[] name = data[(offset + 4) .. (offset + 8)]; 
         libc::printf("TYPE %s \n", name);
         if (libc::strcmp(name, "IHDR") == 0) {
             return ChunkType.IHDR;
         }
 
-        if (libc::strcmp(name, "GAMA") == 0) {
+        if (libc::strcmp(name, "gAMA") == 0) {
             return ChunkType.GAMA;
         }
 
@@ -58,16 +60,26 @@ fn Chunk read_chunk(char* data, uint offset) {
         return ChunkType.ERROR;
     |};
 
+    int size = {|
+        char[4] temp;
+        libc::memcpy(&temp, data + offset, 4);
+        return bitcast(temp, int);
+    |};
+
+    libc::printf("bit size %d \n", size);
     char[] content = data[(offset + 8) .. (offset + 8 + size)];
-    
-    libc::memcpy(data + offset + content.len, &temp, 4);
-    int crc = bitcast(temp, int);
+      
+    int crc = {|
+        char[4] temp;
+        libc::memcpy(&temp, data + offset + 8 + size, 4);
+        return bitcast(temp, int);
+    |};
 
     libc::printf("CRC %d \n", crc);
+
     return Chunk {
         chunkType,
         content,
-        crc,
         4 + 4 + size + 4 // Size + name + content + CRC
     };
 }
@@ -83,7 +95,7 @@ fn int main() {
     long size = libc::ftell(file.file);
     try (File.seek(&file, 0, Seek.SET));
 
-    char* data = malloc(size * char.sizeof);
+    char* data = malloc(size * char.sizeof); 
     defer mem::free(data);
     libc::fread(data, 1, (int)size + 1, file.file);
 
@@ -91,14 +103,14 @@ fn int main() {
         std::io::printf("File is not correct PNG");
         return 1;
     }
-    // Chunk chunk = read_chunk(data, 8);
+
     int offset = 8;
     while(true) {
         Chunk chunk = read_chunk(data, offset);
         offset += chunk.size;
 
         if (chunk.type == ChunkType.IEND) break;
-        if (offset > 40) break;
+        if (offset > 80) break;
     }
     // int j;
     // for(j = 0; j < size; j++) {
