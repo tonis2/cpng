@@ -2,6 +2,9 @@ import std;
 import std::core::mem;
 import libc;
 
+// define BS16(x) ()
+macro char bs16(x) {return ((x) >> 8) | ((x) << 8);}
+
 // fn char[] read4Bytes(char* buffer, int index) {
 //     return buffer[index..(index + 4)];
 // }
@@ -63,10 +66,27 @@ fn Chunk read_chunk(char* data, uint offset) {
     int size = {|
         char[4] temp;
         libc::memcpy(&temp, data + offset, 4);
+
+
+        libc::printf("bit size %d \n", temp[0]);
+        libc::printf("bit size %d \n", temp[1]);
+        libc::printf("bit size %d \n", temp[2]);
+        libc::printf("bit size %d \n", temp[3]);
+
+        temp[0] = temp[3];
+        temp[1] = temp[2];
+        temp[2] = temp[1];
+        temp[3] = temp[0];
+
+        libc::printf("bit size %d \n", temp[0]);
+        libc::printf("bit size %d \n", temp[1]);
+        libc::printf("bit size %d \n", temp[2]);
+        libc::printf("bit size %d \n", temp[3]);
+
         return bitcast(temp, int);
     |};
 
-    libc::printf("bit size %d \n", size);
+    
     char[] content = data[(offset + 8) .. (offset + 8 + size)];
       
     int crc = {|
