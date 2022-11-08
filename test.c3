@@ -1,18 +1,22 @@
 import std;
 import std::core::mem;
 import libc;
-
-// define BS16(x) ()
-macro char bs16(x) {return ((x) >> 8) | ((x) << 8);}
-
-// fn char[] read4Bytes(char* buffer, int index) {
-//     return buffer[index..(index + 4)];
-// }
+import std::array::list;
 
 const char[8] PNG_MAGIC_BYTES = x"89 50 4e 47 0d 0a 1a 0a";
 char[] image = "./assets/red_blue/test.png";
 char[] image2 = "./assets/test.png";
 char[] text = "./file.txt";
+
+struct Image {
+    uint width;
+    uint height;
+    char bitdepth;
+    char colordepth;
+    char compression;
+    char filter;
+    char interlace;
+}
 
 
 enum ChunkType {
@@ -33,73 +37,64 @@ enum ImageType {
 
 struct Chunk {
     ChunkType type;
-    char[] data;
+    int offset;
     int size;
 }
 
-fn Chunk read_chunk(char* data, uint offset) {
-    libc::printf("OFFSET %d \n", offset);
-    
-    ChunkType chunkType = {|
-        char[] name = data[(offset + 4) .. (offset + 8)]; 
-        libc::printf("TYPE %s \n", name);
-        if (libc::strcmp(name, "IHDR") == 0) {
-            return ChunkType.IHDR;
-        }
+fault ChunkError
+{
+    FAULTY_NAME,
+    CORRUPT_DATA,
+}
 
-        if (libc::strcmp(name, "gAMA") == 0) {
-            return ChunkType.GAMA;
-        }
+define ChunkList = List<Chunk>;
 
-        if (libc::strcmp(name, "IDAT") == 0) {
-            return ChunkType.IDAT;
-        }
-
-        if (libc::strcmp(name, "IEND") == 0) {
-            return ChunkType.IEND;
-        }
-
-        libc::printf("CHUNK ERROR TYPE %s \n", name);
-        return ChunkType.ERROR;
-    |};
+fn Chunk! read_chunk(char* data, uint offset) {
 
     int size = {|
         char[4] temp;
         libc::memcpy(&temp, data + offset, 4);
-
-
-        libc::printf("bit size %d \n", temp[0]);
-        libc::printf("bit size %d \n", temp[1]);
-        libc::printf("bit size %d \n", temp[2]);
-        libc::printf("bit size %d \n", temp[3]);
-
-        temp[0] = temp[3];
-        temp[1] = temp[2];
-        temp[2] = temp[1];
-        temp[3] = temp[0];
-
-        libc::printf("bit size %d \n", temp[0]);
-        libc::printf("bit size %d \n", temp[1]);
-        libc::printf("bit size %d \n", temp[2]);
-        libc::printf("bit size %d \n", temp[3]);
-
-        return bitcast(temp, int);
+        return ((temp[0] << 24  | (int)temp[1] << 16  ) | (int)temp[2] << 8  ) | (int)temp[3] ;
     |};
 
-    
-    char[] content = data[(offset + 8) .. (offset + 8 + size)];
+    ChunkType chunkType = {|
+        if (libc::strncmp(data + offset + 4, "IHDR", 4) == 0) {
+            return ChunkType.IHDR;
+        }
+
+        if (libc::strncmp(data + offset + 4, "gAMA", 4) == 0) {
+            return ChunkType.GAMA;
+        }
+
+        if (libc::strncmp(data + offset + 4, "IDAT", 4) == 0) {
+            return ChunkType.IDAT;
+        }
+
+        if (libc::strncmp(data + offset + 4, "IEND", 4) == 0) {
+            return ChunkType.IEND;
+        }
+
+        return ChunkType.ERROR;
+    |};
+  
+    if (chunkType == ChunkType.ERROR) {
+        return ChunkError.FAULTY_NAME!;
+    };
+   
+    // char[] content = data[(offset + 8) .. (offset + 8 + size)];
       
     int crc = {|
         char[4] temp;
         libc::memcpy(&temp, data + offset + 8 + size, 4);
-        return bitcast(temp, int);
+        return ((temp[0] << 24  | (int)temp[1] << 16  ) | (int)temp[2] << 8  ) | (int)temp[3];
     |};
 
-    libc::printf("CRC %d \n", crc);
+     // Todo implement checksum validator
+    //  libc::printf("crc checksum %d \n", crc);
 
     return Chunk {
         chunkType,
-        content,
+        offset,
         4 + 4 + size + 4 // Size + name + content + CRC
     };
 }
@@ -124,13 +119,24 @@ fn int main() {
         return 1;
     }
 
-    int offset = 8;
-    while(true) {
-        Chunk chunk = read_chunk(data, offset);
-        offset += chunk.size;
+    ChunkList chunks;
+    defer chunks.free();
 
+    int offset = 8;
+
+    while(true) {
+        Chunk! chunk = read_chunk(data, offset);
+
+        if (catch chunk) return 5;
+        chunks.push(chunk);
+        
+        offset += chunk.size;
         if (chunk.type == ChunkType.IEND) break;
-        if (offset > 80) break;
+    }
+
+    foreach (Chunk x : chunks)
+    {
+       libc::printf("CHUNK TYPE %d \n", x.type);
     }
     // int j;
     // for(j = 0; j < size; j++) {
