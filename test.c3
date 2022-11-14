@@ -11,13 +11,12 @@ char[] text = "./file.txt";
 struct Image {
     uint width;
     uint height;
-    char bitdepth;
-    char colordepth;
+    char depth;
+    char color;
     char compression;
     char filter;
     char interlace;
 }
-
 
 enum ChunkType {
     IHDR,
@@ -47,15 +46,29 @@ fault ChunkError
     CORRUPT_DATA,
 }
 
+fault DataError {
+    INVALID_COMPRESSION,
+    INVALID_FILTER,
+    UNSUPPORTED_COLOR,
+    UNSUPPORTED_DEPTH,
+    UNSUPPORTED_INTERLACING
+}
+
+fault FileError {
+    INCORRECT_FORMAT
+}
+
 define ChunkList = List<Chunk>;
 
-fn Chunk! read_chunk(char* data, uint offset) {
+fn uint readInt(void* data, int size) {
+    char[4] temp;
+    libc::memcpy(&temp, data, size);
+    return ((temp[0] << 24  | (int)temp[1] << 16  ) | (int)temp[2] << 8  ) | (int)temp[3];
+}
 
-    int size = {|
-        char[4] temp;
-        libc::memcpy(&temp, data + offset, 4);
-        return ((temp[0] << 24  | (int)temp[1] << 16  ) | (int)temp[2] << 8  ) | (int)temp[3] ;
-    |};
+fn Chunk read_chunk(char* data, uint offset) {
+
+    uint size = readInt(data + offset, 4);
 
     ChunkType chunkType = {|
         if (libc::strncmp(data + offset + 4, "IHDR", 4) == 0) {
@@ -76,30 +89,20 @@ fn Chunk! read_chunk(char* data, uint offset) {
 
         return ChunkType.ERROR;
     |};
-  
-    if (chunkType == ChunkType.ERROR) {
-        return ChunkError.FAULTY_NAME!;
-    };
-   
-    // char[] content = data[(offset + 8) .. (offset + 8 + size)];
-      
-    int crc = {|
-        char[4] temp;
-        libc::memcpy(&temp, data + offset + 8 + size, 4);
-        return ((temp[0] << 24  | (int)temp[1] << 16  ) | (int)temp[2] << 8  ) | (int)temp[3];
-    |};
+
+    int crc = readInt(data + offset + 8 + size, 4);
 
      // Todo implement checksum validator
-    //  libc::printf("crc checksum %d \n", crc);
+     // libc::printf("crc checksum %d \n", crc);
 
     return Chunk {
         chunkType,
         offset,
-        4 + 4 + size + 4 // Size + name + content + CRC
+        size 
     };
 }
 
-fn int main() {
+fn void! main() {
     File file;
 
     try (File.open(&file, image2, "rb"));
@@ -114,33 +117,81 @@ fn int main() {
     defer mem::free(data);
     libc::fread(data, 1, (int)size + 1, file.file);
 
-    if(libc::memcmp(data[0..8], &PNG_MAGIC_BYTES, 8) != 0) {
+    if (libc::memcmp(data, &PNG_MAGIC_BYTES, 8) != 0) {
         std::io::printf("File is not correct PNG");
-        return 1;
+        return FileError.INCORRECT_FORMAT!;
     }
 
     ChunkList chunks;
     defer chunks.free();
-
-    int offset = 8;
-
-    while(true) {
-        Chunk! chunk = read_chunk(data, offset);
-
-        if (catch chunk) return 5;
-        chunks.push(chunk);
-        
-        offset += chunk.size;
-        if (chunk.type == ChunkType.IEND) break;
-    }
-
-    foreach (Chunk x : chunks)
     {
-       libc::printf("CHUNK TYPE %d \n", x.type);
+        int offset = 8;
+
+        while(true) {
+            Chunk chunk = read_chunk(data, offset);
+
+            if (chunk.type == ChunkType.ERROR) return ChunkError.FAULTY_NAME!;
+
+            chunks.push(chunk);
+
+            offset += (chunk.size + 12); // Size + name + content + CRC;
+            if (chunk.type == ChunkType.IEND) break;
+        }
     }
+
+    Image img;
+
+    // Parse data for the png
+    
+    foreach (Chunk chunk : chunks)
+    {
+       libc::printf("CHUNK TYPE %d \n", chunk.type);
+
+        // Read image width, height ..etc
+       if (chunk.type == ChunkType.IHDR) {
+           int offset = chunk.offset + 4 + 4;
+           img.width = readInt(data + offset, 4);
+           offset += 4;
+           img.height = readInt(data + offset , 4);
+           offset += 4;
+
+           img.depth = data[offset];
+           img.color = data[offset + 1];
+           img.compression = data[offset + 2];
+           img.filter = data[offset + 3];
+           img.interlace = data[offset + 4];
+
+           if (img.depth != 8) {
+             return DataError.UNSUPPORTED_DEPTH!;
+           }
+
+           if (img.color != 6) {
+             return DataError.UNSUPPORTED_COLOR!;
+           }
+
+           if (img.compression != 0) {
+             return DataError.INVALID_COMPRESSION!;
+           }
+
+           if (img.filter != 0) {
+             return DataError.INVALID_FILTER!;
+           }
+
+           if (img.interlace != 0) {
+             return DataError.UNSUPPORTED_INTERLACING!;
+           }
+       }
+    }
+
+    libc::printf("depth %d \n", img.depth);
+    libc::printf("color %d \n", img.color);
+    libc::printf("compression %d \n", img.compression);
+    libc::printf("filter %d \n", img.filter);
+    libc::printf("interlace %d \n", img.interlace);
+   
     // int j;
     // for(j = 0; j < size; j++) {
     //         libc::printf("%02x ", data[j]);
     // }
-    return 0;
+    // return 0;
 }
