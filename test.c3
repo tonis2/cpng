@@ -8,38 +8,6 @@ char[] image = "./assets/red_blue/test.png";
 char[] image2 = "./assets/test.png";
 char[] text = "./file.txt";
 
-struct Image {
-    uint width;
-    uint height;
-    char depth;
-    char color;
-    char compression;
-    char filter;
-    char interlace;
-}
-
-enum ChunkType {
-    IHDR,
-    GAMA,
-    IDAT,
-    IEND,
-    ERROR
-}
-
-enum ImageType {
-    GRAYSCALE,
-    TRUECOLOR,
-    INDEXEDCOLOR,
-    GREYSCALE_A,
-    TRUECOLOR_A
-}
-
-struct Chunk {
-    ChunkType type;
-    int offset;
-    int size;
-}
-
 fault ChunkError
 {
     FAULTY_NAME,
@@ -59,6 +27,42 @@ fault FileError {
 }
 
 define ChunkList = List<Chunk>;
+define PixelData = List<char>;
+
+struct Image {
+    uint width;
+    uint height;
+    char depth;
+    char color;
+    char compression;
+    char filter;
+    char interlace;
+}
+
+enum ChunkType {
+    IHDR,
+    GAMA,
+    IDAT,
+    PLTE,
+    TRNS,
+    IEND,
+    ERROR,
+}
+
+enum ImageType {
+    GRAYSCALE,
+    TRUECOLOR,
+    INDEXEDCOLOR,
+    GREYSCALE_A,
+    TRUECOLOR_A
+}
+
+struct Chunk {
+    ChunkType type;
+    int offset;
+    int size;
+}
+
 
 fn uint readInt(void* data, int size) {
     char[4] temp;
@@ -66,24 +70,70 @@ fn uint readInt(void* data, int size) {
     return ((temp[0] << 24  | (int)temp[1] << 16  ) | (int)temp[2] << 8  ) | (int)temp[3];
 }
 
+fn Image! parseIHDR(char* data, uint offset) {
+	Image img;
+
+    img.width = readInt(data + offset, 4);
+    offset += 4;
+    img.height = readInt(data + offset , 4);
+    offset += 4;
+
+    img.depth = data[offset];
+    img.color = data[offset + 1];
+    img.compression = data[offset + 2];
+    img.filter = data[offset + 3];
+    img.interlace = data[offset + 4];
+
+    if (img.depth != 8) {
+        return DataError.UNSUPPORTED_DEPTH!;
+    }
+
+    if (img.color != 6) {
+        return DataError.UNSUPPORTED_COLOR!;
+    }
+
+    if (img.compression != 0) {
+        return DataError.INVALID_COMPRESSION!;
+    }
+
+    if (img.filter != 0) {
+        return DataError.INVALID_FILTER!;
+    }
+
+    if (img.interlace != 0) {
+        return DataError.UNSUPPORTED_INTERLACING!;
+    }
+
+	return img;
+}
+
 fn Chunk read_chunk(char* data, uint offset) {
 
     uint size = readInt(data + offset, 4);
 
     ChunkType chunkType = {|
-        if (libc::strncmp(data + offset + 4, "IHDR", 4) == 0) {
+        void* chunk_name = data + offset + 4;
+        if (libc::strncmp(chunk_name, "IHDR", 4) == 0) {
             return ChunkType.IHDR;
         }
 
-        if (libc::strncmp(data + offset + 4, "gAMA", 4) == 0) {
+        if (libc::strncmp(chunk_name, "gAMA", 4) == 0) {
             return ChunkType.GAMA;
         }
 
-        if (libc::strncmp(data + offset + 4, "IDAT", 4) == 0) {
+        if (libc::strncmp(chunk_name, "IDAT", 4) == 0) {
             return ChunkType.IDAT;
         }
 
-        if (libc::strncmp(data + offset + 4, "IEND", 4) == 0) {
+        if (libc::strncmp(chunk_name, "PLTE", 4) == 0) {
+            return ChunkType.PLTE;
+        }
+
+        if (libc::strncmp(chunk_name, "tRNS", 4) == 0) {
+            return ChunkType.TRNS;
+        }
+
+        if (libc::strncmp(chunk_name, "IEND", 4) == 0) {
             return ChunkType.IEND;
         }
 
@@ -122,65 +172,39 @@ fn void! main() {
         return FileError.INCORRECT_FORMAT!;
     }
 
-    ChunkList chunks;
-    defer chunks.free();
+    // ChunkList chunks;
+    // defer chunks.free();
+
+    Image! img;
+	uint pixelsLen = 0;
+	char* pixels;
+    defer mem::free(pixels);
+
     {
         int offset = 8;
 
         while(true) {
             Chunk chunk = read_chunk(data, offset);
 
-            if (chunk.type == ChunkType.ERROR) return ChunkError.FAULTY_NAME!;
-
-            chunks.push(chunk);
-
-            offset += (chunk.size + 12); // Size + name + content + CRC;
             if (chunk.type == ChunkType.IEND) break;
+            if (chunk.type == ChunkType.ERROR) return ChunkError.FAULTY_NAME!;
+            if (chunk.type == ChunkType.IHDR) {
+               // Read image width, height ..etc
+               img = parseIHDR(data, chunk.offset + 4 + 4);
+			   if (catch err = img) return err!;
+
+			   pixels = malloc(img.width * img.height);
+            }
+
+            // Pixel data
+            if (chunk.type == ChunkType.IDAT) {
+				pixelsLen += chunk.size;
+                libc::memcpy(&pixels + pixelsLen, data + offset + 8, chunk.size);
+            }
+                 
+            // Size + name + content + CRC;
+            offset += (chunk.size + 12); 
         }
-    }
-
-    Image img;
-
-    // Parse data for the png
-    
-    foreach (Chunk chunk : chunks)
-    {
-       libc::printf("CHUNK TYPE %d \n", chunk.type);
-
-        // Read image width, height ..etc
-       if (chunk.type == ChunkType.IHDR) {
-           int offset = chunk.offset + 4 + 4;
-           img.width = readInt(data + offset, 4);
-           offset += 4;
-           img.height = readInt(data + offset , 4);
-           offset += 4;
-
-           img.depth = data[offset];
-           img.color = data[offset + 1];
-           img.compression = data[offset + 2];
-           img.filter = data[offset + 3];
-           img.interlace = data[offset + 4];
-
-           if (img.depth != 8) {
-             return DataError.UNSUPPORTED_DEPTH!;
-           }
-
-           if (img.color != 6) {
-             return DataError.UNSUPPORTED_COLOR!;
-           }
-
-           if (img.compression != 0) {
-             return DataError.INVALID_COMPRESSION!;
-           }
-
-           if (img.filter != 0) {
-             return DataError.INVALID_FILTER!;
-           }
-
-           if (img.interlace != 0) {
-             return DataError.UNSUPPORTED_INTERLACING!;
-           }
-       }
     }
 
     libc::printf("depth %d \n", img.depth);
