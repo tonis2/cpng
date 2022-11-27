@@ -1,0 +1,31 @@
+module zlib;
+
+define Z_stream = void*;
+const Z_OK = 0;
+const Z_STREAM_END = 1;
+const Z_NEED_DICT = 2;
+const Z_ERRNO = -1;
+const Z_STREAM_ERROR = -2;
+const Z_DATA_ERROR = -3;
+const Z_MEM_ERROR = -4;
+const Z_BUF_ERROR = -5;
+const Z_VERSION_ERROR = -6;
+const Z_NO_COMPRESSION = 0;
+const Z_BEST_SPEED  =  1;
+const Z_BEST_COMPRESSION = 9;
+const Z_DEFAULT_COMPRESSION = -1;
+const Z_FILTERED = 1;
+const Z_HUFFMAN_ONLY = 2;
+const Z_RLE = 3;
+const Z_FIXED = 4;
+const Z_DEFAULT_STRATEGY = 0;
+const Z_BINARY = 0;
+const Z_TEXT = 1;
+const Z_ASCII = 1;
+const Z_UNKNOWN = 2;
+const Z_DEFLATED = 8;
+const Z_NULL = 0;
+
+fn int uncompress(char* result, int res_len, char* data, int data_len) @extname("uncompress");
+fn int compress(char* result, int res_len, char* data, int data_len) @extname("compress");
+fn int deflateInit(Z_stream* stream, int type) @extname("deflateInit");

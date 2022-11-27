@@ -2,10 +2,10 @@
 	"langrev": "1",
 	"warnings": ["no-unused"],
 	"dependencies": [],
-	"linked-libraries": [],
+	"linked-libraries": ["z"],
 	"authors": ["tonis"],
 	"version": "0.1.0",
-	"sources": ["./png.c3"],
+	"sources": ["./png.c3", "./dependencies/zlib.c3"],
 	"targets": {
 		"test": {
 			"type": "executable",

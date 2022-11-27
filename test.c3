@@ -2,6 +2,7 @@ import std;
 import std::core::mem;
 import libc;
 import std::array::list;
+import zlib;
 
 const char[8] PNG_MAGIC_BYTES = x"89 50 4e 47 0d 0a 1a 0a";
 char[] image = "./assets/red_blue/test.png";
@@ -175,25 +176,35 @@ fn void! main() {
     // ChunkList chunks;
     // defer chunks.free();
 
-    Image! img;
+    Image image_result;
 	uint pixelsLen = 0;
 	char* pixels;
-    defer mem::free(pixels);
+    char* uncompressed_pixels;
+
+    defer {
+        mem::free(pixels);
+        mem::free(uncompressed_pixels);
+    };
 
     {
         int offset = 8;
 
         while(true) {
+            
+            // Read the chunks from raw bytess
             Chunk chunk = read_chunk(data, offset);
 
             if (chunk.type == ChunkType.IEND) break;
             if (chunk.type == ChunkType.ERROR) return ChunkError.FAULTY_NAME!;
             if (chunk.type == ChunkType.IHDR) {
-               // Read image width, height ..etc
-               img = parseIHDR(data, chunk.offset + 4 + 4);
-			   if (catch err = img) return err!;
 
+               // Read image width, height ..etc
+               Image! img = parseIHDR(data, chunk.offset + 4 + 4);
+			   if (catch err = img) return err!;
+               image_result = img;
+               // Allocate data for pixels
 			   pixels = malloc(img.width * img.height);
+               uncompressed_pixels = malloc(img.width * img.height);
             }
 
             // Pixel data
@@ -202,16 +213,36 @@ fn void! main() {
                 libc::memcpy(&pixels + pixelsLen, data + offset + 8, chunk.size);
             }
                  
-            // Size + name + content + CRC;
+            // offset: type + name + size + content + CRC;
             offset += (chunk.size + 12); 
         }
     }
 
-    libc::printf("depth %d \n", img.depth);
-    libc::printf("color %d \n", img.color);
-    libc::printf("compression %d \n", img.compression);
-    libc::printf("filter %d \n", img.filter);
-    libc::printf("interlace %d \n", img.interlace);
+
+	char[] text = "Hello World";
+    char* compressed = malloc(100);
+    defer mem::free(compressed);
+
+    Z_stream defstream;
+
+    defstream.zalloc = null;
+    defstream.zfree = null;
+    defstream.opaque = null;
+    defstream.avail_in = text.len;
+    defstream.next_in = &text;
+    defstream.avail_out = 100;
+    defstream.next_out = &compressed;
+    
+    zlig::deflateInit((&defstream), c.Z_BEST_COMPRESSION);
+
+    // libc::printf("compression error %d \n", err);
+        
+
+    libc::printf("depth %d \n", image_result.depth);
+    libc::printf("color %d \n", image_result.color);
+    libc::printf("compression %d \n", image_result.compression);
+    libc::printf("filter %d \n", image_result.filter);
+    libc::printf("interlace %d \n", image_result.interlace);
    
     // int j;
     // for(j = 0; j < size; j++) {
