@@ -1,7 +1,6 @@
 import std;
 import std::core::mem;
 import libc;
-import std::array::list;
 import zlib;
 
 const char[8] PNG_MAGIC_BYTES = x"89 50 4e 47 0d 0a 1a 0a";
@@ -26,9 +25,6 @@ fault DataError {
 fault FileError {
     INCORRECT_FORMAT
 }
-
-define ChunkList = List<Chunk>;
-define PixelData = List<char>;
 
 struct Image {
     uint width;
@@ -173,8 +169,7 @@ fn void! main() {
         return FileError.INCORRECT_FORMAT!;
     }
 
-    // ChunkList chunks;
-    // defer chunks.free();
+
 
     Image image_result;
 	uint pixelsLen = 0;
@@ -219,34 +214,27 @@ fn void! main() {
     }
 
 
-	char[] text = "Hello World";
-    char* compressed = malloc(100);
-    defer mem::free(compressed);
 
-    Z_stream defstream;
 
-    defstream.zalloc = null;
-    defstream.zfree = null;
-    defstream.opaque = null;
-    defstream.avail_in = text.len;
-    defstream.next_in = &text;
-    defstream.avail_out = 100;
-    defstream.next_out = &compressed;
+    // Z_stream defstream;
+
+    // defstream.zalloc = null;
+    // defstream.zfree = null;
+    // defstream.opaque = null;
+    // defstream.avail_in = text.len;
+    // defstream.next_in = &text;
+    // defstream.avail_out = 100;
+    // defstream.next_out = &compressed;
     
-    zlig::deflateInit((&defstream), c.Z_BEST_COMPRESSION);
+    // zlib::deflateInit(&defstream, Z_BEST_COMPRESSION);
 
     // libc::printf("compression error %d \n", err);
         
 
-    libc::printf("depth %d \n", image_result.depth);
-    libc::printf("color %d \n", image_result.color);
-    libc::printf("compression %d \n", image_result.compression);
-    libc::printf("filter %d \n", image_result.filter);
-    libc::printf("interlace %d \n", image_result.interlace);
-   
-    // int j;
-    // for(j = 0; j < size; j++) {
-    //         libc::printf("%02x ", data[j]);
-    // }
-    // return 0;
+    std::io::printf("depth %d \n", image_result.depth);
+    std::io::printf("color %d \n", image_result.color);
+    std::io::printf("compression %d \n", image_result.compression);
+    std::io::printf("filter %d \n", image_result.filter);
+    std::io::printf("interlace %d \n", image_result.interlace);
+
 }
