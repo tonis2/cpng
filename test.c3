@@ -172,6 +172,7 @@ fn void! main() {
 
 
     Image image_result;
+
 	uint pixelsLen = 0;
 	char* pixels;
     char* uncompressed_pixels;
@@ -183,7 +184,6 @@ fn void! main() {
 
     {
         int offset = 8;
-
         while(true) {
             
             // Read the chunks from raw bytess

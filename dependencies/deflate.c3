@@ -4,35 +4,35 @@ import std::core::mem;
 import libc;
 
 struct BitStream {
-    int currentByte;
-    char* stream;
+    char* buffer;
+    char bits;
+    int first_read;
     int position;
 }
 
 fn BitStream newStream(char* data) {
-    BitStream stream = BitStream{0, data, 0};
+    BitStream stream = BitStream{data, 0, 0, 0};
     return stream;
 }
 
-fn uint BitStream.getNBits(BitStream* self, uint value) {
-    uint result;
-    uint doneBits = 0;
+fn int* BitStream.getNBits(BitStream* self, uint size) {
+     int i;
+     int *bin = malloc(size * int.sizeof);
 
-    while(doneBits == value) {
-        char bit = getBit(self.position + 1, self.stream);
-        result |= ((uint)bit << doneBits);
-        self.position += 1;
+     for (i = 0; i < size; i++) {
+        if (!self.first_read || self.position == char.sizeof) {
+            self.first_read = 1;
+            self.position = 0;
+        }
 
+        int shift_pos = (int)char.sizeof - self.position - 1;
+        bin[i] = (self.bits >> shift_pos) & 1;
+        self.position ++;
+     }
 
-        // if (self.bitPosition == 8) {
-        //     self.currentByte = self.getNextByte();
-        //     self.bitPosition = 0;
-        // }
-    }
-
-    return result;
+    return bin;
 }
 
-fn char getBit(uint index, char* value) {
-    return (index >> (value-1)) & 0x01;
-}
+// fn char getBit(uint index, char* value) {
+//     return (index >> (value-1)) & 0x01;
+// }
